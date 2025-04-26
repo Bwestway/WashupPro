@@ -2,10 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Calendar, Clock, MapPin, CreditCard, Car, Info, Check } from 'lucide-react';
 import { format, addDays, isSameDay } from 'date-fns';
-import Card, { CardContent } from '../components/ui/Card';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
 import { useAuth } from '../contexts/AuthContext';
+import Weather from '../components/Weather';
+import WeatherBackground from '../components/WeatherBackground';
+import WeatherRecommendation from '../components/WeatherRecommendation';
+import useWeather from '../hooks/useWeather';
 
 // Mock services data
 const services = [
@@ -62,9 +65,10 @@ const services = [
 // Generate available time slots
 const generateTimeSlots = () => {
   const slots = [];
-  const now = new Date();
-  const startHour = 8; // 8 AM
-  const endHour = 18; // 6 PM
+  // Start at 8 AM
+  const startHour = 8; 
+  // End at 6 PM
+  const endHour = 18; 
   
   for (let hour = startHour; hour < endHour; hour++) {
     for (let min = 0; min < 60; min += 30) {
@@ -91,6 +95,7 @@ const BookingPage: React.FC = () => {
   const location = useLocation();
   const { user } = useAuth();
   const timeSlots = generateTimeSlots();
+  const { weatherData } = useWeather();
   
   // Get service ID from URL query parameters
   const queryParams = new URLSearchParams(location.search);
@@ -121,6 +126,25 @@ const BookingPage: React.FC = () => {
       setCurrentStep(BookingStep.DateTime);
     }
   }, [preselectedServiceId]);
+  
+  // Get current weather condition from weather data
+  const getCurrentWeatherCondition = () => {
+    if (!weatherData) return 'clear'; // Default fallback
+    
+    try {
+      if (weatherData.current && 
+          weatherData.current.weather && 
+          Array.isArray(weatherData.current.weather) && 
+          weatherData.current.weather.length > 0 &&
+          weatherData.current.weather[0].main) {
+        return weatherData.current.weather[0].main;
+      }
+    } catch (error) {
+      console.error('Error getting weather condition:', error);
+    }
+    
+    return 'clear'; // Default fallback
+  };
   
   // Get selected service object
   const getServiceDetails = () => {
@@ -175,6 +199,7 @@ const BookingPage: React.FC = () => {
       setCurrentStep(BookingStep.Confirmation);
     } catch (error) {
       console.error('Booking failed:', error);
+      setBookingComplete(false);
     } finally {
       setIsLoading(false);
     }
@@ -184,51 +209,53 @@ const BookingPage: React.FC = () => {
   const renderServiceSelection = () => {
     return (
       <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-6">Select a Service</h2>
+        <h2 className="text-2xl font-bold text-white mb-6">Select a Service</h2>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {services.map((service) => (
-            <Card 
+            <div 
               key={service.id}
               onClick={() => setSelectedService(service.id)}
-              className={`cursor-pointer transition-all duration-200 ${
-                selectedService === service.id ? 'ring-2 ring-blue-500 transform scale-[1.02]' : 'hover:shadow-lg'
+              className={`cursor-pointer transition-all duration-200 rounded-lg overflow-hidden shadow-lg ${
+                selectedService === service.id 
+                  ? 'ring-2 ring-blue-500 transform scale-[1.02] bg-white/95 backdrop-blur-sm' 
+                  : 'bg-white/85 backdrop-blur-sm hover:bg-white/95 hover:shadow-xl hover:scale-[1.01]'
               }`}
-              hoverable
             >
-              <div className="h-32 overflow-hidden">
+              <div className="h-40 overflow-hidden">
                 <img 
                   src={service.image} 
                   alt={service.title} 
                   className="w-full h-full object-cover"
                 />
               </div>
-              <CardContent>
+              <div className="p-4">
                 <div className="flex justify-between items-start mb-2">
-                  <h3 className="text-lg font-semibold text-gray-900">{service.title}</h3>
-                  <span className="text-lg font-bold text-blue-700">${service.price}</span>
+                  <h3 className="text-xl font-bold text-gray-900">{service.title}</h3>
+                  <span className="text-xl font-bold text-blue-600">${service.price}</span>
                 </div>
-                <p className="text-gray-600 text-sm mb-2">{service.description}</p>
-                <div className="flex items-center text-gray-500 text-sm">
+                <p className="text-gray-700 text-sm mb-3">{service.description}</p>
+                <div className="flex items-center text-gray-600 text-sm">
                   <Clock size={14} className="mr-1" />
                   <span>{service.duration}</span>
                 </div>
                 
                 {selectedService === service.id && (
-                  <div className="absolute top-2 right-2 bg-blue-500 text-white rounded-full p-1">
+                  <div className="absolute top-2 right-2 bg-blue-500 text-white rounded-full p-1 shadow-md">
                     <Check size={16} />
                   </div>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           ))}
         </div>
         
-        <div className="mt-8 flex justify-end">
+        <div className="mt-8 flex justify-center">
           <Button 
             variant="primary" 
             onClick={goToNextStep}
             disabled={!selectedService}
+            className="px-8 py-2 text-lg shadow-lg"
           >
             Continue
           </Button>
@@ -243,6 +270,12 @@ const BookingPage: React.FC = () => {
     return (
       <div>
         <h2 className="text-2xl font-bold text-gray-900 mb-6">Select Date & Time</h2>
+        
+        <WeatherRecommendation 
+          selectedDate={selectedDate} 
+          onDateChange={setSelectedDate}
+          className="mb-6"
+        />
         
         <div className="mb-8">
           <h3 className="text-lg font-medium text-gray-900 mb-3">Select Date</h3>
@@ -648,6 +681,15 @@ const BookingPage: React.FC = () => {
   };
   
   const renderConfirmation = () => {
+    // Skip rendering if booking is not complete
+    if (!bookingReference || !bookingComplete) {
+      return (
+        <div className="p-8 text-center">
+          <p className="text-gray-600">Processing your booking...</p>
+        </div>
+      );
+    }
+
     return (
       <div className="text-center py-8">
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 mb-6">
@@ -719,15 +761,35 @@ const BookingPage: React.FC = () => {
       case BookingStep.Service:
         return renderServiceSelection();
       case BookingStep.DateTime:
-        return renderDateTimeSelection();
+        return (
+          <div className="bg-white shadow-xl rounded-lg overflow-hidden">
+            {renderDateTimeSelection()}
+          </div>
+        );
       case BookingStep.Location:
-        return renderLocationInfo();
+        return (
+          <div className="bg-white shadow-xl rounded-lg overflow-hidden">
+            {renderLocationInfo()}
+          </div>
+        );
       case BookingStep.VehicleInfo:
-        return renderVehicleInfo();
+        return (
+          <div className="bg-white shadow-xl rounded-lg overflow-hidden">
+            {renderVehicleInfo()}
+          </div>
+        );
       case BookingStep.Payment:
-        return renderPaymentInfo();
+        return (
+          <div className="bg-white shadow-xl rounded-lg overflow-hidden">
+            {renderPaymentInfo()}
+          </div>
+        );
       case BookingStep.Confirmation:
-        return renderConfirmation();
+        return (
+          <div className="bg-white shadow-xl rounded-lg overflow-hidden">
+            {renderConfirmation()}
+          </div>
+        );
       default:
         return renderServiceSelection();
     }
@@ -784,24 +846,30 @@ const BookingPage: React.FC = () => {
   };
   
   return (
-    <div className="min-h-screen pt-20 pb-16 bg-gray-50">
-      <div className="container mx-auto px-4">
-        {!bookingComplete && (
-          <>
-            <div className="text-center mb-8">
-              <h1 className="text-3xl font-bold text-gray-900">Book Your Car Wash</h1>
-              <p className="text-gray-600">Follow the steps below to schedule your service</p>
-            </div>
-            
-            {renderBookingProgress()}
-          </>
-        )}
-        
-        <div className="bg-white rounded-lg shadow-md p-6">
+    <WeatherBackground condition={getCurrentWeatherCondition()}>
+      <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-3xl mx-auto">
+          {/* Weather component at the top */}
+          <div className="mb-10 flex justify-center">
+            <Weather className="w-full max-w-md" />
+          </div>
+          
+          <div className="flex justify-between items-start mb-8">
+            <h1 className="text-3xl font-extrabold text-white">Book Your Service</h1>
+          </div>
+          
+          {renderBookingProgress()}
+          
+          {/* Render current step */}
           {renderCurrentStep()}
+
+          {/* Weather disclaimer */}
+          <div className="mt-4 text-center text-xs text-white/70">
+            <p>Weather data for Rangsit, Bangkok is provided by OpenWeatherMap</p>
+          </div>
         </div>
       </div>
-    </div>
+    </WeatherBackground>
   );
 };
 
